@@ -1,10 +1,3 @@
-import subprocess
-import streamlit as st
-
-# 🔥 Forzar la instalación de Chromium usando el módulo moderno y recomendado
-subprocess.run(["playwright", "install", "chromium"])
-
-
 import streamlit as st
 import concurrent.futures
 
