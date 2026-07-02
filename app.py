@@ -4,19 +4,22 @@ import concurrent.futures
 import streamlit as st
 
 # ====================================================================
-# 🔥 PARCHE TOTAL PARA PLAYWRIGHT EN STREAMLIT CLOUD
+# 🔥 PARCHE DE INICIALIZACIÓN FORZADA (PLAYWRIGHT EN NUBE)
 # ====================================================================
-# Forzamos la ruta donde Playwright debe buscar/guardar los binarios en Linux
+# Forzamos la variable de entorno global antes de que carguen los módulos de raspado
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/home/appuser/.cache/ms-playwright"
 
-try:
-    import playwright
-except ImportError:
-    subprocess.run(["pip", "install", "playwright"])
+@st.cache_resource
+def inicializar_entorno_playwright():
+    """Obliga al servidor a instalar incondicionalmente el lote completo de navegadores."""
+    try:
+        # Asegura la instalación del paquete por comandos antes de invocar los binarios
+        subprocess.run(["python", "-m", "playwright", "install", "--with-deps"], check=True)
+    except Exception as e:
+        st.error(f"⚠️ Alerta en pre-instalación del servidor: {e}")
 
-# Si el directorio no existe, forzamos la descarga del lote completo de navegadores
-if not os.path.exists("/home/appuser/.cache/ms-playwright"):
-    subprocess.run(["python", "-m", "playwright", "install", "--with-deps"])
+# Invocamos la instalación limpia en el arranque de la máquina virtual
+inicializar_entorno_playwright()
 
 # ====================================================================
 # 📦 IMPORTS DEL PROYECTO
