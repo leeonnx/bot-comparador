@@ -32,7 +32,16 @@ st.sidebar.info("Este bot realiza búsquedas en paralelo usando Playwright y apl
 # ====================================================================
 # 🧠 MOTOR DE BÚSQUEDA (Adaptado para la Web)
 # ====================================================================
+def asegurar_navegador():
+    """Descarga el binario ligero necesario justo antes de iniciar el scraping"""
+    import subprocess
+    import os
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/tmp/playwright"
+    if not os.path.exists("/tmp/playwright"):
+        subprocess.run(["python", "-m", "playwright", "install", "chromium"])
+
 def orquestar_busqueda_web(producto, filtrar):
+    asegurar_navegador()  # Aseguramos que el navegador esté listo antes de iniciar
     TIENDAS_ACTIVAS = [
         {"nombre": "PcComponentes", "funcion": buscar_pccomponentes},
         {"nombre": "Coolmod",       "funcion": buscar_coolmod},
