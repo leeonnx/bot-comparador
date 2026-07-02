@@ -33,12 +33,42 @@ st.sidebar.info("Este bot realiza búsquedas en paralelo usando Playwright y apl
 # 🧠 MOTOR DE BÚSQUEDA (Adaptado para la Web)
 # ====================================================================
 def asegurar_navegador():
-    """Descarga el binario ligero necesario justo antes de iniciar el scraping"""
-    import subprocess
     import os
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/tmp/playwright"
-    if not os.path.exists("/tmp/playwright"):
-        subprocess.run(["python", "-m", "playwright", "install", "chromium"])
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    target_path = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/tmp/playwright")).expanduser()
+    target_path.mkdir(parents=True, exist_ok=True)
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(target_path)
+
+    browser_installed = False
+    for candidate in target_path.glob("**/chrome-headless-shell"):
+        if candidate.exists():
+            browser_installed = True
+            break
+
+    if not browser_installed:
+        for candidate in target_path.glob("**/chrome-linux/chrome"):
+            if candidate.exists():
+                browser_installed = True
+                break
+
+    if browser_installed:
+        return
+
+    with st.spinner("🔧 Configurando entorno de navegación (esto solo ocurre una vez)..."):
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            st.error("No se pudo preparar Playwright en la plataforma. Revisa la instalación del navegador.")
+            st.code(exc.stdout or exc.stderr or str(exc))
+            raise
 
 def orquestar_busqueda_web(producto, filtrar):
     asegurar_navegador()  # Aseguramos que el navegador esté listo antes de iniciar
