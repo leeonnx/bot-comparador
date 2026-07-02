@@ -1,7 +1,26 @@
 import streamlit as st
 import concurrent.futures
+import os
+import subprocess
+import streamlit as st
 
-# Importamos tus scrapers tal y como están
+# 🔥 PARCHE PARA PLAYWRIGHT EN STREAMLIT CLOUD
+# Obliga al sistema a instalar y registrar Chromium en la ruta correcta de Linux
+try:
+    import playwright
+except ImportError:
+    subprocess.run(["pip", "install", "playwright"])
+
+# Creamos una variable de entorno para que Playwright sepa dónde guardar y buscar el navegador
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/home/appuser/.cache/ms-playwright"
+
+# Ejecutamos la instalación silenciosa del binario de Chromium con sus dependencias
+if not os.path.exists("/home/appuser/.cache/ms-playwright"):
+    subprocess.run(["python", "-m", "playwright", "install", "chromium"])
+
+# ... (Todo el resto de tu código original sigue exactamente igual abajo)
+
+# Importamos scrapers tal y como están
 from brain.scrapers.pccom import buscar_pccomponentes
 from brain.scrapers.coolmod import buscar_coolmod
 from brain.scrapers.amazon import buscar_amazon
