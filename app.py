@@ -1,77 +1,41 @@
+import os
+import sys
+import subprocess
 import concurrent.futures
 import streamlit as st
 
-# ====================================================================
+# 🔥 CONFIGURACIÓN GLOBAL CRÍTICA: Debe ir ANTES de cualquier import de scrapers
+# Usamos un directorio dentro del proyecto donde SÍ tenemos permisos de escritura
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(os.getcwd(), ".playwright")
+
 # 📦 IMPORTS DEL PROYECTO
-# ====================================================================
 from brain.scrapers.pccom import buscar_pccomponentes
 from brain.scrapers.coolmod import buscar_coolmod
 from brain.scrapers.amazon import buscar_amazon
 from brain.scrapers.neobyte import buscar_neobyte
 
-# Configuración de la página (Título en la pestaña del navegador y layout ancho)
+# Configuración de la página
 st.set_page_config(page_title="Hardware Comparator Bot", layout="wide", page_icon="🖥️")
 
 st.title("🖥️ Bot Comparador de Hardware en Tiempo Real")
-st.markdown("Busca componentes en múltiples tiendas simultáneamente y encuentra el mejor precio de forma limpia.")
 
-# ====================================================================
-# 🎛️ BARRA LATERAL / PANEL DE CONTROL
-# ====================================================================
-st.sidebar.header("Filtros y Configuración")
-
-# Input de texto en la web
-producto_a_buscar = st.sidebar.text_input("🔎 ¿Qué producto quieres buscar?", placeholder="Ej. RTX 4060")
-
-# Checkbox visual para activar el filtro de exclusión
-excluir_equipos = st.sidebar.checkbox("✂️ Excluir PCs premontados y portátiles", value=True)
-
-st.sidebar.markdown("---")
-st.sidebar.info("Este bot realiza búsquedas en paralelo usando Playwright y aplica filtros automáticos de relevancia.")
-
-# ====================================================================
-# 🧠 MOTOR DE BÚSQUEDA (Adaptado para la Web)
-# ====================================================================
 def asegurar_navegador():
-    import os
-    import subprocess
-    import sys
-    from pathlib import Path
+    """Instala el navegador solo si no existe en nuestra carpeta local .playwright"""
+    if not os.path.exists(os.environ["PLAYWRIGHT_BROWSERS_PATH"]):
+        with st.spinner("🔧 Descargando navegador (primera vez)..."):
+            try:
+                # Forzamos la instalación de chromium en nuestra ruta definida
+                subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+            except Exception as e:
+                st.error(f"Error al preparar el navegador: {e}")
+                st.stop()
 
-    target_path = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/tmp/playwright")).expanduser()
-    target_path.mkdir(parents=True, exist_ok=True)
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(target_path)
-
-    browser_installed = False
-    for candidate in target_path.glob("**/chrome-headless-shell"):
-        if candidate.exists():
-            browser_installed = True
-            break
-
-    if not browser_installed:
-        for candidate in target_path.glob("**/chrome-linux/chrome"):
-            if candidate.exists():
-                browser_installed = True
-                break
-
-    if browser_installed:
-        return
-
-    with st.spinner("🔧 Configurando entorno de navegación (esto solo ocurre una vez)..."):
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "playwright", "install", "chromium"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as exc:
-            st.error("No se pudo preparar Playwright en la plataforma. Revisa la instalación del navegador.")
-            st.code(exc.stdout or exc.stderr or str(exc))
-            raise
-
+# ====================================================================
+# MOTOR DE BÚSQUEDA
+# ====================================================================
 def orquestar_busqueda_web(producto, filtrar):
-    asegurar_navegador()  # Aseguramos que el navegador esté listo antes de iniciar
+    asegurar_navegador() 
+    
     TIENDAS_ACTIVAS = [
         {"nombre": "PcComponentes", "funcion": buscar_pccomponentes},
         {"nombre": "Coolmod",       "funcion": buscar_coolmod},
@@ -80,76 +44,44 @@ def orquestar_busqueda_web(producto, filtrar):
     ]
     
     todos_los_resultados = []
-    
-    # Creamos un contenedor de texto dinámico para ir mostrando el progreso en la web
     log_status = st.empty()
-    log_status.text("🚀 Iniciando búsqueda paralela en las tiendas...")
+    log_status.text("🚀 Iniciando búsqueda paralela...")
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(TIENDAS_ACTIVAS)) as executor:
-        futuros = {
-            executor.submit(tienda["funcion"], producto): tienda["nombre"] 
-            for tienda in TIENDAS_ACTIVAS
-        }
-        
+        futuros = {executor.submit(t["funcion"], producto): t["nombre"] for t in TIENDAS_ACTIVAS}
         for futuro in concurrent.futures.as_completed(futuros):
-            nombre_tienda = futuros[futuro]
             try:
-                resultados_tienda = futuro.result()
-                if resultados_tienda:
-                    todos_los_resultados.extend(resultados_tienda)
+                res = futuro.result()
+                if res: todos_los_resultados.extend(res)
             except Exception as e:
-                st.error(f"❌ Error crítico en {nombre_tienda}: {e}")
+                st.error(f"Error en {futuros[futuro]}: {e}")
 
-    # Aplicar el filtro si está activo
+    # Filtrado
     if filtrar:
-        palabras_bloqueadas = [
-            "portátil", "laptop", "sobremesa", "desktop", "ordenador", 
-            "pc gaming", "premontado", " workstation", "intel core", "amd ryzen"
-        ]
-        resultados_filtrados = []
-        for prod in todos_los_resultados:
-            nombre_minusculas = prod["nombre"].lower()
-            if any(palabra in nombre_minusculas for palabra in palabras_bloqueadas):
-                continue
-            resultados_filtrados.append(prod)
-        todos_los_resultados = resultados_filtrados
+        bloqueadas = ["portátil", "laptop", "sobremesa", "desktop", "ordenador", "pc gaming", "premontado"]
+        todos_los_resultados = [p for p in todos_los_resultados if not any(b in p["nombre"].lower() for b in bloqueadas)]
 
-    log_status.empty() # Borramos el log de estado cuando termina
+    log_status.empty()
     return sorted(todos_los_resultados, key=lambda x: x['precio'])
 
-# ====================================================================
-# 🚀 ACCIÓN DE BÚSQUEDA
-# ====================================================================
+# UI principal
+producto_a_buscar = st.sidebar.text_input("🔎 ¿Qué producto buscas?", placeholder="Ej. RTX 4060")
+excluir_equipos = st.sidebar.checkbox("✂️ Excluir PCs premontados", value=True)
+
 if st.sidebar.button("⚡ Ejecutar Comparación", type="primary"):
     if not producto_a_buscar.strip():
-        st.warning("Por favor, introduce un nombre de producto válido.")
+        st.warning("Introduce un producto.")
     else:
-        # Añadimos un spinner de carga animado precioso en la web
-        with st.spinner(f"Buscando '{producto_a_buscar}' en todas las tiendas..."):
+        with st.spinner("Buscando..."):
             resultados = orquestar_busqueda_web(producto_a_buscar, excluir_equipos)
             
         if not resultados:
-            st.error("No se encontraron resultados que coincidan con los criterios de búsqueda.")
+            st.error("No se encontraron resultados.")
         else:
-            st.success(f"📊 ¡Búsqueda completada! Se han encontrado {len(resultados)} ofertas optimizadas.")
-            
-            # 🏆 Mostramos los resultados en un formato de tarjetas o bloques limpios
-            st.subheader("🏆 TOP OFERTAS ENCONTRADAS (Ordenadas de menor a mayor precio)")
-            
             for i, prod in enumerate(resultados[:10], start=1):
-                # Creamos una caja visual para cada producto
                 with st.container(border=True):
-                    # Dividimos en columnas: Posición/Tienda, Nombre, Precio y Enlace
-                    col1, col2, col3 = st.columns([1.5, 6, 2.5])
-                    
-                    with col1:
-                        st.markdown(f"### #{i}")
-                        st.caption(f"🏬 {prod['tienda']}")
-                        
-                    with col2:
-                        st.markdown(f"**{prod['nombre']}**")
-                        
-                    with col3:
-                        st.markdown(f"### {prod['precio']} €")
-                        # Botón web real que redirige a la tienda en otra pestaña
-                        st.link_button("🛒 Ir a la Oferta", prod['enlace'], use_container_width=True)
+                    col1, col2, col3 = st.columns([1, 6, 2])
+                    col1.markdown(f"### #{i}")
+                    col2.markdown(f"**{prod['nombre']}**")
+                    col3.markdown(f"### {prod['precio']} €")
+                    col3.link_button("Ir a la oferta", prod['enlace'])
