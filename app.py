@@ -19,16 +19,19 @@ st.set_page_config(page_title="Hardware Comparator Bot", layout="wide", page_ico
 
 st.title("🖥️ Bot Comparador de Hardware en Tiempo Real")
 
+import os
+import streamlit as st
+
+# Ruta fija para el navegador
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/home/appuser/.ms-playwright"
+
 def asegurar_navegador():
-    """Instala el navegador solo si no existe en nuestra carpeta local .playwright"""
-    if not os.path.exists(os.environ["PLAYWRIGHT_BROWSERS_PATH"]):
-        with st.spinner("🔧 Descargando navegador (primera vez)..."):
-            try:
-                # Forzamos la instalación de chromium en nuestra ruta definida
-                subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-            except Exception as e:
-                st.error(f"Error al preparar el navegador: {e}")
-                st.stop()
+    if not os.path.exists("/home/appuser/.ms-playwright"):
+        with st.spinner("🔧 Preparando navegador..."):
+            import subprocess
+            import sys
+            # El comando correcto es este. Nada más.
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
 
 # ====================================================================
 # MOTOR DE BÚSQUEDA

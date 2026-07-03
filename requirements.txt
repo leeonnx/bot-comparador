@@ -1,3 +1,2 @@
-playwright
-playwright-python-chromium
 streamlit
+playwright
